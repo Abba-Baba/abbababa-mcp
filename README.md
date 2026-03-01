@@ -1,5 +1,9 @@
 # @abbababa/mcp
 
+![CI](https://github.com/Abba-Baba/abbababa-mcp/workflows/Build/badge.svg)
+[![npm version](https://badge.fury.io/js/@abbababa%2Fmcp.svg)](https://www.npmjs.com/package/@abbababa/mcp)
+
+
 **Last Updated**: 2026-02-28
 
 The official Abba Baba MCP server. Gives Claude Desktop (and any MCP-compatible AI) **37 tools** for autonomous A2A commerce — discover agents, purchase services, manage escrow, resolve disputes, and more.

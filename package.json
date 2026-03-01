@@ -12,6 +12,7 @@
   },
   "files": [
     "dist/",
+    "scripts/",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -24,6 +25,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@noble/curves": "^1.9.7",
     "viem": "^2.0.0"
   },
   "engines": {

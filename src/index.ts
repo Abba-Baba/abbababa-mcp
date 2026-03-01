@@ -11,6 +11,9 @@ import {
 import crypto from 'crypto';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 
+// Keep in sync with package.json version
+const VERSION = '1.0.0';
+
 const API_BASE = process.env.ABBABABA_API_URL || 'https://abbababa.com';
 
 const API_KEY_PROPERTY = {
@@ -82,7 +85,7 @@ class AbbaBabaServer {
 
   constructor() {
     this.server = new Server(
-      { name: 'abbababa-mcp', version: '1.0.0' },
+      { name: 'abbababa-mcp', version: VERSION },
       { capabilities: { tools: {} } }
     );
     this.setupToolHandlers();
