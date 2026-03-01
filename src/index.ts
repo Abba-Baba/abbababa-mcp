@@ -9,10 +9,10 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import crypto from 'crypto';
-import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import { privateKeyToAccount } from 'viem/accounts';
 
 // Keep in sync with package.json version
-const VERSION = '1.0.0';
+const VERSION = '1.2.0';
 
 const API_BASE = process.env.ABBABABA_API_URL || 'https://abbababa.com';
 
@@ -74,6 +74,8 @@ class AbbaBabaServer {
       /^0\./,
       /^::1$/,
       /^fd[0-9a-f]{2}:/i,
+      /^fe80:/i,
+      /^fc00:/i,
       /^localhost$/i,
       /^metadata\.google\.internal$/i,
       /^169\.254\.169\.254$/,
@@ -144,46 +146,6 @@ class AbbaBabaServer {
                 api_key: API_KEY_PROPERTY,
               },
               required: ['service_id'],
-            },
-          },
-          {
-            name: 'abbababa_purchase',
-            description: 'Purchase an agent service with escrowed USDC payment. network="base-sepolia" (default) = live marketplace on Base Sepolia testnet — real escrow, real testnet USDC, builds your on-chain score toward the ≥10 threshold for mainnet. network="base" = mainnet real transactions, requires score ≥ 10 (use get_agent_trust_score to check). Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                service_id: { type: 'string', description: 'The service ID to purchase' },
-                quantity: { type: 'number', description: 'Quantity to purchase', default: 1 },
-                payment_method: {
-                  type: 'string',
-                  enum: ['usdc', 'crypto'],
-                  description: 'Payment method to use',
-                },
-                callback_url: { type: 'string', description: 'Webhook URL to receive results when service is delivered' },
-                request_payload: { type: 'object', description: 'Input data required by the service' },
-                dispute_window: {
-                  type: 'number',
-                  description: 'How long (seconds) buyer has to dispute after delivery before escrow auto-releases to seller. Min: 300 (5 min, fast agent-to-agent). Max: 86400 (24 hrs, complex deliverables). Default: 300. Examples: instant data feeds → 300, AI-generated reports → 3600, custom software → 86400.',
-                  default: 300,
-                },
-                abandonment_grace: {
-                  type: 'number',
-                  description: 'How long (seconds) to wait for seller to deliver before buyer can reclaim escrow as abandoned. Min: 3600 (1 hr). Max: 2592000 (30 days). Default: 172800 (48 hrs). Set lower for time-sensitive services, higher for long-running jobs.',
-                  default: 172800,
-                },
-                success_criteria: {
-                  type: 'object',
-                  description: 'Structured criteria for AI dispute resolution. If delivery is disputed, Claude evaluates whether these criteria were met. Example: { "must_include": ["executive summary", "data sources"], "format": "PDF", "min_words": 500 }. The more specific, the fairer the resolution.',
-                },
-                network: {
-                  type: 'string',
-                  enum: ['base-sepolia', 'base'],
-                  description: 'Network to use. base-sepolia = testnet (default), base = mainnet',
-                  default: 'base-sepolia',
-                },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['service_id', 'payment_method', 'callback_url'],
             },
           },
           {
@@ -259,55 +221,8 @@ class AbbaBabaServer {
             },
           },
           {
-            name: 'abbababa_deliver',
-            description: 'Mark a service transaction as delivered and provide results (seller only). Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                transaction_id: { type: 'string', description: 'Transaction ID' },
-                response_payload: { type: 'object', description: 'Results of the service execution' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['transaction_id', 'response_payload'],
-            },
-          },
-          {
-            name: 'abbababa_confirm',
-            description: 'Confirm delivery and release escrow funds to the seller (buyer only). Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                transaction_id: { type: 'string', description: 'Transaction ID to confirm' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['transaction_id'],
-            },
-          },
-          {
-            name: 'abbababa_fund',
-            description: 'Verify on-chain escrow funding after buyer funds the escrow contract. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                transaction_id: { type: 'string', description: 'Transaction ID' },
-                tx_hash: { type: 'string', description: 'On-chain transaction hash of the funding tx' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['transaction_id', 'tx_hash'],
-            },
-          },
-          {
-            name: 'abbababa_create_wallet',
-            description: 'Generate a new Ethereum wallet (address + private key). No network calls — runs locally. Use this first before abbababa_register. IMPORTANT: save the private key securely — it cannot be recovered.',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-              required: [],
-            },
-          },
-          {
             name: 'abbababa_register',
-            description: 'STEP 2 OF 3 — Register your wallet as an agent on the live marketplace. Requires ≥$1 USDC on Base Sepolia (get free testnet USDC at https://faucet.circle.com). Returns your API key. Once registered, every transaction you complete on Base Sepolia builds your on-chain score. Reach score ≥ 10 to unlock mainnet (Step 3). Use abbababa_create_wallet first if you need a wallet.',
+            description: 'STEP 2 OF 3 — Register your wallet as an agent on the live marketplace. Requires ≥$1 USDC on Base Sepolia (get free testnet USDC at https://faucet.circle.com). Returns your API key. Once registered, every transaction you complete on Base Sepolia builds your on-chain score. Reach score ≥ 10 to unlock mainnet (Step 3). Generate a wallet first with: node scripts/generate-wallet.mjs',
             inputSchema: {
               type: 'object',
               properties: {
@@ -315,91 +230,6 @@ class AbbaBabaServer {
                 agent_description: { type: 'string', description: 'Description of what this agent does' },
               },
               required: ['agent_name'],
-            },
-          },
-          // ========== Fractal Analytics ==========
-          {
-            name: 'analyze_pattern_complexity',
-            description: 'Analyze the fractal complexity of time series data (sales, prices, customer behavior)',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                data: {
-                  type: 'array',
-                  items: { type: 'number' },
-                  description: 'Time series data points (minimum 10 required)',
-                  minItems: 10,
-                },
-                analysis_type: {
-                  type: 'string',
-                  enum: ['dimension', 'classify', 'analyze', 'sales_pattern', 'market_behavior'],
-                  description: 'Type of fractal analysis to perform',
-                  default: 'analyze',
-                },
-                k_max: {
-                  type: 'number',
-                  description: 'Maximum k value for fractal dimension algorithm (1-50)',
-                  default: 10,
-                  minimum: 1,
-                  maximum: 50,
-                },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['data'],
-            },
-          },
-          {
-            name: 'find_similar_patterns',
-            description: 'Find products with similar fractal complexity patterns',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                target_data: {
-                  type: 'array',
-                  items: { type: 'number' },
-                  description: 'Reference time series to find similar patterns for',
-                  minItems: 10,
-                },
-                similarity_threshold: {
-                  type: 'number',
-                  description: 'Maximum fractal dimension difference (0.0-1.0, lower = more similar)',
-                  default: 0.1,
-                  minimum: 0.0,
-                  maximum: 1.0,
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of similar products to return',
-                  default: 10,
-                  maximum: 50,
-                },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['target_data'],
-            },
-          },
-          {
-            name: 'generate_test_patterns',
-            description: 'Generate test time series data with known fractal properties for testing',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                pattern_type: {
-                  type: 'string',
-                  enum: ['sine_wave', 'white_noise', 'trending', 'random_walk'],
-                  description: 'Type of test pattern to generate',
-                  default: 'sine_wave',
-                },
-                length: {
-                  type: 'number',
-                  description: 'Number of data points to generate',
-                  default: 50,
-                  minimum: 10,
-                  maximum: 1000,
-                },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: [],
             },
           },
           // ========== Agent Discovery & UCP ==========
@@ -600,195 +430,6 @@ class AbbaBabaServer {
                 api_key: API_KEY_PROPERTY,
               },
               required: [],
-            },
-          },
-          // ========== Memory ==========
-          {
-            name: 'abbababa_memory_write',
-            description: 'Write context, state, or data to persistent agent memory. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                key: { type: 'string', description: 'Unique key for this memory entry' },
-                value: { description: 'The data to store (any JSON value)' },
-                namespace: { type: 'string', description: 'Namespace for grouping (default: "default")' },
-                memory_type: { type: 'string', enum: ['permanent', 'session', 'cache'] },
-                tags: { type: 'array', items: { type: 'string' } },
-                ttl_seconds: { type: 'number', description: 'Time-to-live in seconds (for session/cache types)' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['key', 'value'],
-            },
-          },
-          {
-            name: 'abbababa_memory_read',
-            description: 'Read a memory entry by key. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                key: { type: 'string' },
-                namespace: { type: 'string' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['key'],
-            },
-          },
-          {
-            name: 'abbababa_memory_search',
-            description: 'Semantic search over your memory entries using natural language. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
-                namespace: { type: 'string' },
-                limit: { type: 'number', default: 10 },
-                threshold: { type: 'number', default: 0.5 },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['query'],
-            },
-          },
-          {
-            name: 'abbababa_memory_history',
-            description: 'List and filter your memory entries. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                namespace: { type: 'string' },
-                memory_type: { type: 'string', enum: ['permanent', 'session', 'cache'] },
-                tags: { type: 'string', description: 'Comma-separated tags to filter by' },
-                limit: { type: 'number', default: 20 },
-                offset: { type: 'number', default: 0 },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: [],
-            },
-          },
-          // ========== Messaging ==========
-          {
-            name: 'abbababa_message_send',
-            description: 'Send a message to another agent (direct) or to a topic (fan-out). Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                to_agent_id: { type: 'string', description: 'Recipient agent ID (for direct messages)' },
-                topic: { type: 'string', description: 'Topic name (for topic messages)' },
-                subject: { type: 'string' },
-                body: { type: 'object' },
-                priority: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
-                callback_url: { type: 'string' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['body'],
-            },
-          },
-          {
-            name: 'abbababa_message_inbox',
-            description: 'Check your message inbox. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                status: { type: 'string' },
-                topic: { type: 'string' },
-                limit: { type: 'number', default: 20 },
-                offset: { type: 'number', default: 0 },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: [],
-            },
-          },
-          {
-            name: 'abbababa_message_subscribe',
-            description: 'Subscribe to a message topic to receive fan-out messages. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                topic: { type: 'string' },
-                callback_url: { type: 'string' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['topic'],
-            },
-          },
-          // ========== Channels ==========
-          {
-            name: 'abbababa_channel_list',
-            description: 'List all public channels on the platform. Shows subscriber count, message count, and whether you are already subscribed. Use this to discover what broadcast channels exist before subscribing.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                api_key: API_KEY_PROPERTY,
-              },
-              required: [],
-            },
-          },
-          {
-            name: 'abbababa_channel_subscribe',
-            description: 'Subscribe to a channel to receive its messages and gain permission to publish. Idempotent — safe to call twice. Must be subscribed before you can publish.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                channel_id: { type: 'string', description: 'Channel ID to subscribe to (get from abbababa_channel_list)' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['channel_id'],
-            },
-          },
-          {
-            name: 'abbababa_channel_publish',
-            description: 'Publish a message to a channel. You must be subscribed first. All subscribers can read your message via abbababa_channel_messages.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                channel_id: { type: 'string', description: 'Channel ID to publish to' },
-                payload: { type: 'object', description: 'Message payload — any JSON object. Example: { "type": "price_update", "service_id": "...", "price": 1.50 }' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['channel_id', 'payload'],
-            },
-          },
-          {
-            name: 'abbababa_channel_messages',
-            description: 'Read messages from a channel. Use the since parameter for incremental polling — pass the createdAt of the last message you received to only get new ones.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                channel_id: { type: 'string', description: 'Channel ID to read from' },
-                since: { type: 'string', description: 'ISO 8601 timestamp — only return messages after this time. Example: 2026-02-28T12:00:00Z. Omit to get all recent messages.' },
-                limit: { type: 'number', description: 'Max messages to return (1-200, default 50)', default: 50 },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['channel_id'],
-            },
-          },
-          {
-            name: 'abbababa_channel_unsubscribe',
-            description: 'Unsubscribe from a channel. You will no longer appear as a subscriber and cannot publish until you re-subscribe.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                channel_id: { type: 'string', description: 'Channel ID to unsubscribe from' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['channel_id'],
-            },
-          },
-          // ========== One-shot Settlement ==========
-          {
-            name: 'abbababa_settle',
-            description: 'One-shot discover + escrow: finds the best matching service and creates an escrow in a single call. Faster than calling abbababa_search then abbababa_purchase separately. Use when you know what you need and want to transact immediately.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                service_id: { type: 'string', description: 'Specific service ID to buy (use this if you already know the service)' },
-                service_query: { type: 'string', description: 'Natural language query to find the best matching service (e.g. "sentiment analysis API", "image captioning")' },
-                callback_url: { type: 'string', description: 'Webhook URL where the seller will POST the delivery result' },
-                payment_method: { type: 'string', enum: ['usdc', 'crypto'], default: 'usdc' },
-                quantity: { type: 'number', default: 1 },
-                request_payload: { type: 'object', description: 'Input data for the service (e.g. the text to analyze, image URL, etc.)' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['callback_url'],
             },
           },
           // ========== Agent Profile & Sessions ==========
@@ -1143,30 +784,6 @@ class AbbaBabaServer {
             },
           },
           {
-            name: 'abbababa_claim_abandoned',
-            description: 'Recover funds from an escrow where the seller never delivered (buyer only, after abandonment grace period). Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                transaction_id: { type: 'string', description: 'Transaction ID to claim as abandoned' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['transaction_id'],
-            },
-          },
-          {
-            name: 'abbababa_finalize',
-            description: 'Auto-release escrow to seller after the dispute window expires with no dispute raised. Permissionless — anyone can call. Uses ABBABABA_API_KEY env var by default.',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                transaction_id: { type: 'string', description: 'Transaction ID to finalize' },
-                api_key: API_KEY_PROPERTY,
-              },
-              required: ['transaction_id'],
-            },
-          },
-          {
             name: 'abbababa_usage',
             description: 'Check your current API usage, budget consumption, and rate limit status. Uses ABBABABA_API_KEY env var by default.',
             inputSchema: {
@@ -1188,18 +805,10 @@ class AbbaBabaServer {
         switch (name) {
           case 'abbababa_search':           return await this.handleSearch(args);
           case 'abbababa_service_details':  return await this.handleServiceDetails(args);
-          case 'abbababa_purchase':         return await this.handlePurchase(args);
           case 'abbababa_list_service':     return await this.handleListService(args);
           case 'abbababa_my_services':      return await this.handleMyServices(args);
           case 'abbababa_my_transactions':  return await this.handleMyTransactions(args);
-          case 'abbababa_deliver':          return await this.handleDeliver(args);
-          case 'abbababa_confirm':          return await this.handleConfirm(args);
-          case 'abbababa_fund':             return await this.handleFund(args);
-          case 'abbababa_create_wallet':     return this.handleCreateWallet();
           case 'abbababa_register':         return await this.handleRegister(args);
-          case 'analyze_pattern_complexity':return await this.handlePatternComplexity(args);
-          case 'find_similar_patterns':     return await this.handleSimilarPatterns(args);
-          case 'generate_test_patterns':    return await this.handleTestPatterns(args);
           case 'discover_agents':           return await this.handleAgentDiscovery(args);
           case 'discover_agent_services':   return await this.handleDiscoverAgentServices(args);
           case 'register_capability':       return await this.handleCapabilityRegistration(args);
@@ -1210,19 +819,6 @@ class AbbaBabaServer {
           case 'get_agent_trust_score':     return await this.handleGetAgentTrustScore(args);
           case 'create_sandbox':            return await this.handleCreateSandbox(args);
           case 'list_sandbox_templates':    return await this.handleListSandboxTemplates(args);
-          case 'abbababa_memory_write':     return await this.handleMemoryWrite(args);
-          case 'abbababa_memory_read':      return await this.handleMemoryRead(args);
-          case 'abbababa_memory_search':    return await this.handleMemorySearch(args);
-          case 'abbababa_memory_history':   return await this.handleMemoryHistory(args);
-          case 'abbababa_message_send':     return await this.handleMessageSend(args);
-          case 'abbababa_message_inbox':    return await this.handleMessageInbox(args);
-          case 'abbababa_message_subscribe':     return await this.handleMessageSubscribe(args);
-          case 'abbababa_channel_list':          return await this.handleChannelList(args);
-          case 'abbababa_channel_subscribe':    return await this.handleChannelSubscribe(args);
-          case 'abbababa_channel_publish':      return await this.handleChannelPublish(args);
-          case 'abbababa_channel_messages':     return await this.handleChannelMessages(args);
-          case 'abbababa_channel_unsubscribe':  return await this.handleChannelUnsubscribe(args);
-          case 'abbababa_settle':                   return await this.handleSettle(args);
           case 'abbababa_my_profile':               return await this.handleMyProfile(args);
           case 'abbababa_fee_tier':                 return await this.handleFeeTier(args);
           case 'abbababa_session_create':           return await this.handleSessionCreate(args);
@@ -1252,8 +848,6 @@ class AbbaBabaServer {
           case 'abbababa_dispute':              return await this.handleDispute(args);
           case 'abbababa_dispute_status':       return await this.handleDisputeStatus(args);
           case 'abbababa_dispute_evidence':     return await this.handleDisputeEvidence(args);
-          case 'abbababa_claim_abandoned':      return await this.handleClaimAbandoned(args);
-          case 'abbababa_finalize':             return await this.handleFinalize(args);
           case 'abbababa_usage':                return await this.handleUsage(args);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -1282,6 +876,7 @@ class AbbaBabaServer {
       api_key?: string
     };
     const apiKey = process.env.ABBABABA_API_KEY || (args.api_key as string | undefined);
+    if (apiKey) this.validateApiKey(apiKey);
 
     let products: unknown[] = [];
     let services: unknown[] = [];
@@ -1330,43 +925,6 @@ class AbbaBabaServer {
     if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Service API error: ${resp.status}`);
     const result = await resp.json();
     return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handlePurchase(args: Record<string, unknown>) {
-    const { service_id, quantity = 1, payment_method, callback_url, request_payload, dispute_window, abandonment_grace, success_criteria, network } = args as {
-      service_id: string; quantity?: number; payment_method: string; callback_url: string
-      request_payload?: Record<string, unknown>; dispute_window?: number; abandonment_grace?: number
-      success_criteria?: Record<string, unknown>; network?: string
-    };
-    this.validateId(service_id, 'service_id');
-    if (callback_url) this.validateHttpUrl(callback_url, 'callback_url');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    let criteriaHash: string | undefined;
-    if (success_criteria) {
-      criteriaHash = '0x' + crypto.createHash('sha256').update(JSON.stringify(success_criteria)).digest('hex');
-    }
-
-    const resp = await fetch(`${API_BASE}/api/v1/checkout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({
-        serviceId: service_id, quantity, paymentMethod: payment_method, callbackUrl: callback_url,
-        requestPayload: request_payload,
-        ...(dispute_window !== undefined && { disputeWindow: dispute_window }),
-        ...(abandonment_grace !== undefined && { abandonmentGrace: abandonment_grace }),
-        ...(criteriaHash && { criteriaHash }),
-        ...(network && { network }),
-      }),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json();
-      throw new McpError(ErrorCode.InternalError, `Purchase failed: ${err.error || resp.statusText}`);
-    }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Purchase initiated successfully', transaction: result.data }, null, 2) }] };
   }
 
   private async handleListService(args: Record<string, unknown>) {
@@ -1419,77 +977,6 @@ class AbbaBabaServer {
     if (!resp.ok) throw new McpError(ErrorCode.InternalError, `API error: ${resp.status}`);
     const result = await resp.json();
     return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleDeliver(args: Record<string, unknown>) {
-    const { transaction_id, response_payload } = args as { transaction_id: string; response_payload: Record<string, unknown> };
-    this.validateId(transaction_id, 'transaction_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/transactions/${transaction_id}/deliver`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ responsePayload: response_payload }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Delivery failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Service delivered successfully', transaction: result.data }, null, 2) }] };
-  }
-
-  private async handleConfirm(args: Record<string, unknown>) {
-    const { transaction_id } = args as { transaction_id: string };
-    this.validateId(transaction_id, 'transaction_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/transactions/${transaction_id}/confirm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Confirm failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Transaction confirmed and escrow released', transaction: result.data }, null, 2) }] };
-  }
-
-  private async handleFund(args: Record<string, unknown>) {
-    const { transaction_id, tx_hash } = args as { transaction_id: string; tx_hash: string };
-    this.validateId(transaction_id, 'transaction_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/transactions/${transaction_id}/fund`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ txHash: tx_hash }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Fund verification failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Escrow funding verified', transaction: result.data }, null, 2) }] };
-  }
-
-  private handleCreateWallet() {
-    const privateKey = generatePrivateKey();
-    const account = privateKeyToAccount(privateKey);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          address: account.address,
-          privateKey,
-          warning: '🔐 Save this private key now — it cannot be recovered. Never share it.',
-          nextSteps: [
-            '1. Copy and store the private key securely (password manager, not a text file)',
-            '2. Fund this address with ≥1 USDC on Base Sepolia (testnet) or Base mainnet',
-            '   Testnet faucet: https://faucet.circle.com — select Base Sepolia, paste your address',
-            '3. Set env var: export ABBABABA_AGENT_PRIVATE_KEY="' + privateKey + '"',
-            '4. Run abbababa_register with your agent_name to get your API key',
-            '5. Set env var: export ABBABABA_API_KEY="<key from step 4>"',
-            '6. You\'re ready — try abbababa_search to find services',
-          ],
-        }, null, 2),
-      }],
-    };
   }
 
   private async handleRegister(args: Record<string, unknown>) {
@@ -1580,149 +1067,6 @@ class AbbaBabaServer {
       if (error instanceof McpError) throw error;
       throw new McpError(ErrorCode.InternalError, `Registration error: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }
-
-  // =========================================================================
-  // Fractal analytics handlers
-  // =========================================================================
-
-  private async handlePatternComplexity(args: Record<string, unknown>) {
-    const { data, analysis_type = 'analyze', k_max = 10 } = args as {
-      data: number[]; analysis_type?: string; k_max?: number; api_key?: string
-    };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/analytics/fractal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ data, operation: analysis_type, k_max }),
-    });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Fractal analysis failed: ${resp.status}`);
-    const analysisResult = await resp.json();
-
-    let formattedResult: Record<string, unknown>;
-    switch (analysis_type) {
-      case 'analyze':
-        formattedResult = {
-          fractal_dimension: analysisResult.analysis?.fractal_dimension,
-          complexity_class: analysisResult.analysis?.complexity_class,
-          pattern_description: analysisResult.analysis?.pattern_description,
-          data_quality: { data_points: analysisResult.analysis?.data_points, calculation_reliable: analysisResult.analysis?.calculation_reliable },
-          interpretation: this.interpretFractalDimension(analysisResult.analysis?.fractal_dimension),
-        };
-        break;
-      case 'market_behavior':
-        formattedResult = { market_analysis: analysisResult.market_analysis, trading_insights: this.generateTradingInsights(analysisResult.market_analysis) };
-        break;
-      case 'sales_pattern':
-        formattedResult = { sales_complexity: analysisResult.sales_complexity, complexity_class: analysisResult.complexity_class, business_insights: this.generateBusinessInsights(analysisResult) };
-        break;
-      default:
-        formattedResult = analysisResult as Record<string, unknown>;
-    }
-    return { content: [{ type: 'text', text: JSON.stringify(formattedResult, null, 2) }] };
-  }
-
-  private async handleSimilarPatterns(args: Record<string, unknown>) {
-    const { target_data, similarity_threshold = 0.1 } = args as {
-      target_data: number[]; similarity_threshold?: number; api_key?: string
-    };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const targetResp = await fetch(`${API_BASE}/api/v1/analytics/fractal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ data: target_data, operation: 'dimension' }),
-    });
-    if (!targetResp.ok) throw new McpError(ErrorCode.InternalError, `Target analysis failed: ${targetResp.status}`);
-    const targetResult = await targetResp.json() as { fractal_dimension: number };
-    const targetFD = targetResult.fractal_dimension;
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          target_fractal_dimension: targetFD,
-          target_complexity_class: this.classifyFractalDimension(targetFD),
-          similarity_threshold,
-          similar_patterns: [{ pattern_type: 'Example Similar Product', fractal_dimension: targetFD + 0.02, similarity_score: 0.02 }],
-          search_insights: { target_interpretation: this.interpretFractalDimension(targetFD), recommendation: this.generateSimilarityRecommendations(similarity_threshold) },
-        }, null, 2),
-      }],
-    };
-  }
-
-  private async handleTestPatterns(args: Record<string, unknown>) {
-    const { pattern_type = 'sine_wave', length = 50 } = args as { pattern_type?: string; length?: number; api_key?: string };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/analytics/fractal?test=${pattern_type}&length=${length}`, {
-      headers: { 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Test pattern generation failed: ${resp.status}`);
-    const testResult = await resp.json() as { fractal_dimension: number };
-
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          ...testResult,
-          usage_examples: this.generateUsageExamples(pattern_type),
-          fractal_insights: this.interpretFractalDimension(testResult.fractal_dimension),
-        }, null, 2),
-      }],
-    };
-  }
-
-  // Fractal helpers
-  private interpretFractalDimension(fd: number): string {
-    if (fd < 1.2) return 'Highly predictable pattern with strong trending behavior';
-    if (fd < 1.4) return 'Moderate complexity with some predictable elements';
-    if (fd < 1.7) return 'Complex behavior with high volatility';
-    return 'Chaotic pattern with unpredictable movements';
-  }
-
-  private classifyFractalDimension(fd: number): string {
-    if (fd < 1.2) return 'smooth';
-    if (fd < 1.4) return 'moderate';
-    if (fd < 1.7) return 'complex';
-    return 'chaotic';
-  }
-
-  private generateTradingInsights(analysis: { volatility_level: string; trend_strength: string; market_behavior: string }): Record<string, string> {
-    return {
-      risk_level: analysis?.volatility_level,
-      trend_reliability: analysis?.trend_strength,
-      recommended_strategy: analysis?.volatility_level === 'Low' ? 'Suitable for trend following strategies' : 'Consider volatility-based strategies',
-      market_timing: analysis?.market_behavior?.includes('Trending') ? 'Good for position holding' : 'Consider shorter timeframes',
-    };
-  }
-
-  private generateBusinessInsights(analysis: { complexity_class: string }): Record<string, string> {
-    return {
-      demand_predictability: analysis?.complexity_class === 'smooth' ? 'High' : 'Low',
-      inventory_planning: analysis?.complexity_class === 'smooth' ? 'Stable demand — plan for steady inventory' : 'Volatile demand — maintain flexible inventory',
-      pricing_strategy: analysis?.complexity_class === 'chaotic' ? 'Dynamic pricing recommended' : 'Stable pricing suitable',
-    };
-  }
-
-  private generateSimilarityRecommendations(threshold: number): string {
-    if (threshold < 0.05) return 'Very strict similarity — will find nearly identical patterns';
-    if (threshold < 0.15) return 'Moderate similarity — good balance of precision and discovery';
-    return 'Loose similarity — may include quite different patterns';
-  }
-
-  private generateUsageExamples(patternType: string): string[] {
-    const examples: Record<string, string[]> = {
-      sine_wave: ['Test fractal analysis with smooth, predictable data', 'Validate algorithm accuracy against known patterns', 'Baseline for comparing real-world data complexity'],
-      white_noise: ['Test with maximum complexity/chaos', 'Validate upper bounds of fractal dimension calculation', 'Compare against highly volatile market data'],
-      trending: ['Simulate steady growth patterns', 'Test trend detection capabilities', 'Model predictable business growth'],
-      random_walk: ['Simulate financial market movements', 'Test intermediate complexity patterns', 'Model customer behavior with some randomness'],
-    };
-    return examples[patternType] || ['General testing and validation'];
   }
 
   // =========================================================================
@@ -1952,80 +1296,6 @@ class AbbaBabaServer {
   }
 
   // =========================================================================
-  // Memory handlers
-  // =========================================================================
-
-  private async handleMemoryWrite(args: Record<string, unknown>) {
-    const { key, value, namespace, memory_type, tags, ttl_seconds } = args as {
-      key: string; value: unknown; namespace?: string; memory_type?: string; tags?: string[]; ttl_seconds?: number
-    };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/memory`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ key, value, namespace, memoryType: memory_type, tags, ttlSeconds: ttl_seconds }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Memory write failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleMemoryRead(args: Record<string, unknown>) {
-    const { key, namespace } = args as { key: string; namespace?: string };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const params = new URLSearchParams();
-    if (namespace) params.set('namespace', namespace);
-    const qs = params.toString();
-    const url = `${API_BASE}/api/v1/memory/${encodeURIComponent(key)}${qs ? `?${qs}` : ''}`;
-
-    const resp = await fetch(url, { headers: { 'X-API-Key': apiKey } });
-    if (resp.status === 404) return { content: [{ type: 'text', text: 'Memory entry not found' }] };
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Memory read failed: ${resp.statusText}`);
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleMemorySearch(args: Record<string, unknown>) {
-    const { query, namespace, limit, threshold } = args as { query: string; namespace?: string; limit?: number; threshold?: number };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/memory/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ query, namespace, limit, threshold }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Memory search failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleMemoryHistory(args: Record<string, unknown>) {
-    const { namespace, memory_type, tags, limit, offset } = args as {
-      namespace?: string; memory_type?: string; tags?: string; limit?: number; offset?: number
-    };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const params = new URLSearchParams();
-    if (namespace) params.set('namespace', namespace);
-    if (memory_type) params.set('memoryType', memory_type);
-    if (tags) params.set('tags', tags);
-    if (limit !== undefined) params.set('limit', String(limit));
-    if (offset !== undefined) params.set('offset', String(offset));
-    const qs = params.toString();
-
-    const resp = await fetch(`${API_BASE}/api/v1/memory${qs ? `?${qs}` : ''}`, { headers: { 'X-API-Key': apiKey } });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Memory history failed: ${resp.statusText}`);
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ entries: result.data, pagination: result.pagination }, null, 2) }] };
-  }
-
-  // =========================================================================
   // Dispute handlers
   // =========================================================================
 
@@ -2075,36 +1345,6 @@ class AbbaBabaServer {
     return { content: [{ type: 'text', text: JSON.stringify({ message: 'Evidence submitted', evidence: result.data }, null, 2) }] };
   }
 
-  private async handleClaimAbandoned(args: Record<string, unknown>) {
-    const { transaction_id } = args as { transaction_id: string };
-    this.validateId(transaction_id, 'transaction_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/transactions/${transaction_id}/claimAbandoned`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Claim abandoned failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Abandoned escrow claim initiated', calldata: result.data }, null, 2) }] };
-  }
-
-  private async handleFinalize(args: Record<string, unknown>) {
-    const { transaction_id } = args as { transaction_id: string };
-    this.validateId(transaction_id, 'transaction_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/transactions/${transaction_id}/finalize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Finalize failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ message: 'Escrow finalized and funds released to seller', transaction: result.data }, null, 2) }] };
-  }
-
   private async handleUsage(args: Record<string, unknown>) {
     const apiKey = this.getApiKey(args);
     this.validateApiKey(apiKey);
@@ -2113,32 +1353,6 @@ class AbbaBabaServer {
       headers: { 'X-API-Key': apiKey },
     });
     if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Usage check failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  // =========================================================================
-  // One-shot settlement handler
-  // =========================================================================
-
-  private async handleSettle(args: Record<string, unknown>) {
-    const { service_id, service_query, callback_url, payment_method = 'usdc', quantity = 1, request_payload } = args as {
-      service_id?: string; service_query?: string; callback_url: string;
-      payment_method?: string; quantity?: number; request_payload?: Record<string, unknown>;
-    };
-    if (service_id) this.validateId(service_id, 'service_id');
-    if (callback_url) this.validateHttpUrl(callback_url, 'callback_url');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    if (!service_id && !service_query) {
-      throw new McpError(ErrorCode.InvalidParams, 'Either service_id or service_query is required');
-    }
-    const resp = await fetch(`${API_BASE}/api/v1/settle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ serviceId: service_id, serviceQuery: service_query, callbackUrl: callback_url, paymentMethod: payment_method, quantity, requestPayload: request_payload }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Settle failed (${resp.status}): ${err.error || resp.statusText}`); }
     const result = await resp.json();
     return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
   }
@@ -2447,131 +1661,6 @@ class AbbaBabaServer {
     if (!resp.ok) throw new McpError(ErrorCode.InternalError, `DNS stats failed: ${resp.statusText}`);
     const result = await resp.json();
     return { content: [{ type: 'text', text: JSON.stringify(result.statistics, null, 2) }] };
-  }
-
-  // =========================================================================
-  // Messaging handlers
-  // =========================================================================
-
-  // =========================================================================
-  // Channel handlers
-  // =========================================================================
-
-  private async handleChannelList(args: Record<string, unknown>) {
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    const resp = await fetch(`${API_BASE}/api/v1/channels`, { headers: { 'X-API-Key': apiKey } });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Channel list failed: ${resp.statusText}`);
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleChannelSubscribe(args: Record<string, unknown>) {
-    const { channel_id } = args as { channel_id: string };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    const resp = await fetch(`${API_BASE}/api/v1/channels/subscribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ channelId: channel_id }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Channel subscribe failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ ...result.data, message: 'Subscribed — you can now publish and read messages on this channel' }, null, 2) }] };
-  }
-
-  private async handleChannelPublish(args: Record<string, unknown>) {
-    const { channel_id, payload } = args as { channel_id: string; payload: Record<string, unknown> };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    const resp = await fetch(`${API_BASE}/api/v1/channels/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ channelId: channel_id, payload }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Channel publish failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleChannelMessages(args: Record<string, unknown>) {
-    const { channel_id, since, limit } = args as { channel_id: string; since?: string; limit?: number };
-    this.validateId(channel_id, 'channel_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    const params = new URLSearchParams();
-    if (since) params.set('since', since);
-    if (limit !== undefined) params.set('limit', String(limit));
-    const qs = params.toString();
-    const resp = await fetch(`${API_BASE}/api/v1/channels/${channel_id}/messages${qs ? `?${qs}` : ''}`, {
-      headers: { 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Channel messages failed: ${resp.statusText}`);
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleChannelUnsubscribe(args: Record<string, unknown>) {
-    const { channel_id } = args as { channel_id: string };
-    this.validateId(channel_id, 'channel_id');
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-    const resp = await fetch(`${API_BASE}/api/v1/channels/${channel_id}/unsubscribe`, {
-      method: 'POST',
-      headers: { 'X-API-Key': apiKey },
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Channel unsubscribe failed: ${err.error || resp.statusText}`); }
-    return { content: [{ type: 'text', text: JSON.stringify({ channelId: channel_id, message: 'Unsubscribed successfully' }, null, 2) }] };
-  }
-
-  private async handleMessageSend(args: Record<string, unknown>) {
-    const { to_agent_id, topic, subject, body, priority, callback_url } = args as {
-      to_agent_id?: string; topic?: string; subject?: string; body: Record<string, unknown>; priority?: string; callback_url?: string
-    };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ toAgentId: to_agent_id, topic, subject, body, priority, callbackUrl: callback_url }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Message send failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
-  }
-
-  private async handleMessageInbox(args: Record<string, unknown>) {
-    const { status, topic, limit, offset } = args as { status?: string; topic?: string; limit?: number; offset?: number };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const params = new URLSearchParams();
-    if (status) params.set('status', status);
-    if (topic) params.set('topic', topic);
-    if (limit !== undefined) params.set('limit', String(limit));
-    if (offset !== undefined) params.set('offset', String(offset));
-    const qs = params.toString();
-
-    const resp = await fetch(`${API_BASE}/api/v1/messages${qs ? `?${qs}` : ''}`, { headers: { 'X-API-Key': apiKey } });
-    if (!resp.ok) throw new McpError(ErrorCode.InternalError, `Inbox fetch failed: ${resp.statusText}`);
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify({ messages: result.data, pagination: result.pagination }, null, 2) }] };
-  }
-
-  private async handleMessageSubscribe(args: Record<string, unknown>) {
-    const { topic, callback_url } = args as { topic: string; callback_url?: string };
-    const apiKey = this.getApiKey(args);
-    this.validateApiKey(apiKey);
-
-    const resp = await fetch(`${API_BASE}/api/v1/messages/subscribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ topic, callbackUrl: callback_url }),
-    });
-    if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Subscribe failed: ${err.error || resp.statusText}`); }
-    const result = await resp.json();
-    return { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] };
   }
 
   // =========================================================================

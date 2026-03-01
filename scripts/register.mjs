@@ -240,10 +240,13 @@ async function main() {
   console.log(`\n  ${bold(green(result.apiKey))}\n`);
   console.log(`  ${bold(yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))}\n`);
 
-  console.log(`\n  ${bold(yellow('━━━ YOUR E2E PRIVATE KEY (shown once — save it now) ━━━'))}`);
-  console.log(`\n  ${bold(green(e2ePrivHex))}\n`);
-  console.log(`  ${bold(yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'))}\n`);
-  info('Set this as ABBABABA_E2E_PRIVATE_KEY in your SDK agent environment.');
+  // Save e2e private key to file (chmod 600) — never print to stdout
+  const e2eKeyFile = '.abbababa-e2e-key';
+  writeFileSync(e2eKeyFile, e2ePrivHex + '\n', { mode: 0o600 });
+  ok(`E2E private key saved to ${bold(e2eKeyFile)} (chmod 600)`);
+  warn(`View it privately: ${cyan(`cat ${e2eKeyFile}`)}`);
+  warn(`Add ${bold(e2eKeyFile)} to your .gitignore and delete the file after copying to a password manager.`);
+  info('Set ABBABABA_E2E_PRIVATE_KEY in your SDK agent environment.');
   info('The corresponding public key has been registered with the platform.');
 
   // ── Step 7: Save options ─────────────────────────────────────────────────
@@ -258,7 +261,7 @@ async function main() {
   } else {
     console.log(`  ${bold('Option A')} — Add to your shell profile (~/.zshrc or ~/.bashrc):`);
     console.log(`  ${cyan(`export ABBABABA_API_KEY="${result.apiKey}"`)}`);
-    console.log(`  ${cyan(`export ABBABABA_E2E_PRIVATE_KEY="${e2ePrivHex}"`)}\n`);
+    console.log(`  ${cyan(`export ABBABABA_E2E_PRIVATE_KEY="$(cat ${e2eKeyFile})"`)}\n`);
 
     console.log(`  ${bold('Option B')} — Add to the MCP server config (persistent across sessions):`);
     console.log(`  ${cyan(`claude mcp remove abbababa`)}`);

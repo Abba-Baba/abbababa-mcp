@@ -1,6 +1,34 @@
 # @abbababa/mcp Changelog
 
-**Last Updated**: 2026-02-28
+**Last Updated**: 2026-03-01
+
+## [1.2.0] — 2026-03-01 — Remove financial tools + fix private key exposure
+
+### Security
+- **Removed financial tools** — `abbababa_purchase`, `abbababa_settle`, `abbababa_fund`, `abbababa_deliver`, `abbababa_confirm`, `abbababa_claim_abandoned`, `abbababa_finalize` no longer exposed via MCP. MCP has no second factor; a leaked API key must not be able to move real funds. Use `@abbababa/sdk` for financial operations (requires separate wallet private key signing).
+- **`generate-wallet.mjs`**: Private key is now saved to `.abbababa-wallet` (chmod 600) instead of being printed to stdout. Address is still shown on screen. `--export` mode emits a stderr warning before writing to stdout.
+- **`register.mjs`**: E2E private key is now saved to `.abbababa-e2e-key` (chmod 600) instead of being printed to stdout. Shell profile instructions updated to reference the file path.
+
+### Kept (read-only + protective)
+- `abbababa_dispute`, `abbababa_dispute_status`, `abbababa_dispute_evidence` — protect buyer funds, never move them
+- `abbababa_my_transactions`, `abbababa_usage` — read-only
+- All playground tools — simulated mUSDC only, no real funds
+
+### Tool count: 53 → 46
+
+## [1.1.0] — 2026-03-01 — Security hardening
+
+### Removed
+- `abbababa_create_wallet` — private keys must not transit MCP stdio; use `node scripts/generate-wallet.mjs` instead
+- Memory tools (write/read/search/history) — use SDK with E2E encryption instead
+- Messaging tools (send/inbox/subscribe) — use SDK with E2E encryption instead
+- Channel tools (list/subscribe/publish/messages/unsubscribe) — use SDK instead
+- Fractal analytics tools (analyze/similar/generate) — no data yet; use SDK directly when ready
+
+### Security
+- Added IPv6 link-local (fe80::/10) and ULA (fc00::/7) to SSRF blocklist
+- Added callback_url SSRF validation in purchase and settle flows
+- Added API key format validation to search handler
 
 ## 1.0.0 (2026-02-28)
 

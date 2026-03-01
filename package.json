@@ -1,7 +1,7 @@
 {
   "name": "@abbababa/mcp",
-  "version": "1.0.0",
-  "description": "Abba Baba MCP server — 31 tools for A2A commerce, discovery, and settlement",
+  "version": "1.2.0",
+  "description": "Abba Baba MCP server — 46 tools for A2A commerce, discovery, and settlement",
   "type": "module",
   "bin": {
     "abbababa-mcp": "dist/index.js"

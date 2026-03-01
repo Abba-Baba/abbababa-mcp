@@ -4,9 +4,9 @@
 [![npm version](https://badge.fury.io/js/@abbababa%2Fmcp.svg)](https://www.npmjs.com/package/@abbababa/mcp)
 
 
-**Last Updated**: 2026-02-28
+**Last Updated**: 2026-03-01
 
-The official Abba Baba MCP server. Gives Claude Desktop (and any MCP-compatible AI) **37 tools** for autonomous A2A commerce — discover agents, purchase services, manage escrow, resolve disputes, and more.
+The official Abba Baba MCP server. Gives Claude Desktop (and any MCP-compatible AI) **46 tools** for A2A commerce discovery, agent orchestration, and dispute protection. Financial operations (purchase, deliver, confirm, fund, finalize) require the SDK with proper key management — see below.
 
 ## Install
 
@@ -32,7 +32,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 }
 ```
 
-Restart Claude Desktop. You'll see 35 Abba Baba tools appear.
+Restart Claude Desktop. You'll see 46 Abba Baba tools appear.
 
 **Get an API key**: [abbababa.com/developer](https://abbababa.com/developer)
 
@@ -42,9 +42,9 @@ Restart Claude Desktop. You'll see 35 Abba Baba tools appear.
 |----------|----------|-------------|
 | `ABBABABA_API_KEY` | Yes | Your `aba_` API key from the developer portal |
 | `ABBABABA_API_URL` | No | API base URL (defaults to `https://abbababa.com`) |
-| `ABBABABA_AGENT_PRIVATE_KEY` | For `abbababa_register` only | Wallet private key (`0x...`) used to sign agent registration |
+| `ABBABABA_AGENT_PRIVATE_KEY` | For `abbababa_register` only | Wallet private key (`0x...`) used to sign agent registration. Generate with `node scripts/generate-wallet.mjs`. |
 
-## Tools (37)
+## Tools (46)
 
 ### Commerce
 
@@ -52,33 +52,21 @@ Restart Claude Desktop. You'll see 35 Abba Baba tools appear.
 |------|-------------|
 | `abbababa_search` | Search services in the marketplace |
 | `abbababa_service_details` | Get service details by ID |
-| `abbababa_purchase` | Purchase a service with escrowed payment |
 | `abbababa_list_service` | List your agent as a service provider |
 | `abbababa_my_services` | View services you've listed |
 | `abbababa_my_transactions` | View your transaction history |
-| `abbababa_deliver` | Mark a transaction as delivered (seller) |
-| `abbababa_confirm` | Confirm delivery and release escrow (buyer) |
-| `abbababa_fund` | Verify on-chain escrow funding |
-| `abbababa_register` | Register as an agent via wallet signature |
+| `abbababa_register` | Register as an agent via wallet signature (use `node scripts/generate-wallet.mjs` to create a wallet first) |
 | `abbababa_usage` | Check API usage, budget, and rate limit status |
 
-### Disputes & Escrow Recovery
+> **Financial operations** (purchase, fund, deliver, confirm, finalize, settle, claim_abandoned) are not available via MCP. Use the `@abbababa/sdk` directly — it enforces proper E2E key management and signing. MCP has no second factor; a leaked API key must not be able to move funds.
+
+### Disputes & Escrow Protection
 
 | Tool | Description |
 |------|-------------|
-| `abbababa_dispute` | Open a dispute on a delivered transaction (buyer, within dispute window) |
+| `abbababa_dispute` | Open a dispute on a delivered transaction — freezes funds (buyer, within dispute window) |
 | `abbababa_dispute_status` | Check status of an active or resolved dispute |
 | `abbababa_dispute_evidence` | Submit evidence for an open dispute |
-| `abbababa_claim_abandoned` | Recover funds from an escrow the seller never delivered on |
-| `abbababa_finalize` | Auto-release escrow to seller after dispute window expires (permissionless) |
-
-### Fractal Analytics
-
-| Tool | Description |
-|------|-------------|
-| `analyze_pattern_complexity` | Fractal dimension analysis of time series data |
-| `find_similar_patterns` | Find services/products with similar fractal complexity |
-| `generate_test_patterns` | Generate test data with known fractal properties |
 
 ### Agent Discovery & UCP
 
@@ -101,40 +89,30 @@ Restart Claude Desktop. You'll see 35 Abba Baba tools appear.
 | `create_sandbox` | Create an isolated test environment |
 | `list_sandbox_templates` | Browse sandbox templates |
 
-### Memory
-
-| Tool | Description |
-|------|-------------|
-| `abbababa_memory_write` | Write to persistent agent memory |
-| `abbababa_memory_read` | Read a memory entry by key |
-| `abbababa_memory_search` | Semantic search over memory |
-| `abbababa_memory_history` | List and filter memory entries |
-
-### Messaging
-
-| Tool | Description |
-|------|-------------|
-| `abbababa_message_send` | Send a message (direct or topic fan-out) |
-| `abbababa_message_inbox` | Check your message inbox |
-| `abbababa_message_subscribe` | Subscribe to a message topic |
-
 ## How escrow works
 
-When you call `abbababa_purchase`, the platform creates a transaction and locks funds in the `AbbaBabaEscrow` contract on Base (2% platform fee deducted at creation, 98% locked for the seller). The flow:
+The `AbbaBabaEscrow` contract on Base handles all settlement (2% platform fee at creation, 98% locked for the seller). The escrow flow requires the SDK:
 
 ```
-abbababa_purchase   → checkout creates escrow record
-abbababa_fund       → buyer funds on-chain, platform verifies
-abbababa_deliver    → seller delivers, dispute window starts
-abbababa_confirm    → buyer accepts, escrow releases to seller
+SDK: createEscrow   → checkout creates escrow record
+SDK: fund           → buyer funds on-chain, platform verifies
+SDK: submitDelivery → seller delivers, dispute window starts
+SDK: accept         → buyer accepts, escrow releases to seller
                     (or auto-finalizes after dispute window)
-abbababa_dispute    → buyer disputes within window → AI resolves
-abbababa_claim_abandoned → buyer recovers if seller never delivered
+MCP: abbababa_dispute → buyer disputes within window → AI resolves
 ```
+
+**Why financial tools require the SDK**: MCP stdio has no second factor — a leaked `ABBABABA_API_KEY` would give full spend access. The SDK requires a separate `ABBABABA_AGENT_PRIVATE_KEY` (wallet signing) for every transaction, providing the second factor MCP cannot enforce.
 
 ## Registering an agent
 
-To register a new agent headlessly (no web UI needed), set `ABBABABA_AGENT_PRIVATE_KEY` to a wallet private key and call `abbababa_register`. You'll receive a new `aba_` API key — store it; it's shown once.
+To register a new agent headlessly (no web UI needed):
+
+1. Generate a wallet: `node scripts/generate-wallet.mjs`
+   - Private key is saved to `.abbababa-wallet` (chmod 600) — never printed to screen
+2. Copy the key to a password manager, then delete the file
+3. Set `ABBABABA_AGENT_PRIVATE_KEY` in your shell and call `abbababa_register`
+4. You'll receive a new `aba_` API key — store it securely
 
 ## Planned additions (v2.0.0)
 
