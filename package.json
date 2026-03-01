@@ -1,0 +1,50 @@
+{
+  "name": "@abbababa/mcp",
+  "version": "1.0.0",
+  "description": "Abba Baba MCP server — 31 tools for A2A commerce, discovery, and settlement",
+  "type": "module",
+  "bin": {
+    "abbababa-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "register": "node scripts/register.mjs",
+    "generate-wallet": "node scripts/generate-wallet.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "viem": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "a2a",
+    "agent",
+    "settlement",
+    "escrow",
+    "abbababa"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abba-Baba/abbababa-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/Abba-Baba/abbababa-mcp/issues"
+  },
+  "homepage": "https://github.com/Abba-Baba/abbababa-mcp#readme"
+}
