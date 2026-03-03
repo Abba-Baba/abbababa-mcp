@@ -121,6 +121,12 @@ class AbbaBabaServer {
                   default: 10,
                   maximum: 100,
                 },
+                network: {
+                  type: 'string',
+                  enum: ['base-sepolia', 'base'],
+                  default: 'base-sepolia',
+                  description: 'Settlement network to filter by',
+                },
                 filters: {
                   type: 'object',
                   description: 'Advanced filtering options',
@@ -178,6 +184,12 @@ class AbbaBabaServer {
                   default: 'webhook',
                 },
                 endpoint_url: { type: 'string', description: 'Endpoint URL that provides the service' },
+                network: {
+                  type: 'string',
+                  enum: ['base-sepolia', 'base'],
+                  default: 'base-sepolia',
+                  description: 'Settlement network for this service',
+                },
                 api_key: API_KEY_PROPERTY,
               },
               required: ['title', 'description', 'category', 'price', 'price_unit'],
@@ -868,11 +880,12 @@ class AbbaBabaServer {
   // =========================================================================
 
   private async handleSearch(args: Record<string, unknown>) {
-    const { query, type = 'all', limit = 10, filters } = args as {
+    const { query, type = 'all', limit = 10, filters, network } = args as {
       query: string
       type?: string
       limit?: number
       filters?: { min_price?: number; max_price?: number; category?: string; min_rating?: number }
+      network?: string
       api_key?: string
     };
     const apiKey = process.env.ABBABABA_API_KEY || (args.api_key as string | undefined);
@@ -900,6 +913,7 @@ class AbbaBabaServer {
         if (filters?.category) url.searchParams.set('category', filters.category);
         if (filters?.min_rating) url.searchParams.set('min_rating', String(filters.min_rating));
         if (filters?.max_price) url.searchParams.set('max_price', String(filters.max_price));
+        if (network) url.searchParams.set('network', network);
         const resp = await fetch(url.toString(), {
           headers: { ...(apiKey && { 'X-API-Key': apiKey }) },
         });
@@ -928,9 +942,9 @@ class AbbaBabaServer {
   }
 
   private async handleListService(args: Record<string, unknown>) {
-    const { title, description, category, price, price_unit, currency, delivery_type, endpoint_url } = args as {
+    const { title, description, category, price, price_unit, currency, delivery_type, endpoint_url, network } = args as {
       title: string; description: string; category: string; price: number; price_unit: string
-      currency?: string; delivery_type?: string; endpoint_url?: string
+      currency?: string; delivery_type?: string; endpoint_url?: string; network?: string
     };
     if (endpoint_url) this.validateHttpUrl(endpoint_url, 'endpoint_url');
     const apiKey = this.getApiKey(args);
@@ -939,7 +953,7 @@ class AbbaBabaServer {
     const resp = await fetch(`${API_BASE}/api/v1/services`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ title, description, category, price, priceUnit: price_unit, currency, deliveryType: delivery_type, endpointUrl: endpoint_url }),
+      body: JSON.stringify({ title, description, category, price, priceUnit: price_unit, currency, deliveryType: delivery_type, endpointUrl: endpoint_url, network }),
     });
     if (!resp.ok) { const err = await resp.json(); throw new McpError(ErrorCode.InternalError, `Listing failed: ${err.error || resp.statusText}`); }
     const result = await resp.json();
